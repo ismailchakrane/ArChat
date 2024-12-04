@@ -1,0 +1,2 @@
+# Ignore vectorstore database file
+data/vectorstore/chroma.sqlite3
