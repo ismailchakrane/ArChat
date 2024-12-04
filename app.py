@@ -10,7 +10,7 @@ import streamlit as st
 import json
 
 # Login to Hugging Face
-login(token="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")
+login(token="...")
 
 # MODEL AND PIPELINE SETUP
 model_name = "t5-small"
