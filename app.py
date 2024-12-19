@@ -1,166 +1,136 @@
+import streamlit as st
+import os
+from langchain.text_splitter import CharacterTextSplitter
+from langchain.document_loaders import PyPDFLoader
 from langchain.chains import LLMChain
 from langchain.prompts import PromptTemplate
-from langchain.llms import HuggingFacePipeline
-from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, pipeline
-from langchain.memory import ConversationBufferMemory
-from langchain.chains.router import MultiPromptChain, LLMRouterChain
-from langchain.chains.router.llm_router import RouterOutputParser
-from huggingface_hub import login
-import streamlit as st
-import json
+from langchain.llms import Ollama
 
-# Login to Hugging Face
-login(token="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")
+# If you wanted a small Hugging Face model instead of Ollama, you could do:
+# from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, pipeline
+# from langchain.llms import HuggingFacePipeline
+# model_name = "google/flan-t5-small"
+# tokenizer = AutoTokenizer.from_pretrained(model_name)
+# model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+# pipe = pipeline("text2text-generation", model=model, tokenizer=tokenizer, max_length=512)
+# llm = HuggingFacePipeline(pipeline=pipe)
 
-# MODEL AND PIPELINE SETUP
-model_name = "t5-small"
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+# -----------------------------
+# Utility Functions
+# -----------------------------
+def load_pdf_text(pdf_path):
+    loader = PyPDFLoader(pdf_path)
+    docs = loader.load()
+    text = "\n".join([doc.page_content for doc in docs])
+    return text
 
-if tokenizer.pad_token is None:
-    tokenizer.pad_token = tokenizer.eos_token
+def get_available_pdfs(directory="data"):
+    files = [f for f in os.listdir(directory) if f.lower().endswith(".pdf")]
+    return files
 
-pipe = pipeline(
-    "text2text-generation",
-    model=model,
-    tokenizer=tokenizer,
-    max_length=1500,
-    num_beams=5,
-    pad_token_id=tokenizer.pad_token_id
-)
+def save_uploaded_file(uploaded_file, directory="data"):
+    with open(os.path.join(directory, uploaded_file.name), "wb") as f:
+        f.write(uploaded_file.getbuffer())
+    return uploaded_file.name
 
-llm = HuggingFacePipeline(pipeline=pipe)
+# -----------------------------
+# Using Ollama LLM (llama3.2 model)
+# -----------------------------
+llm = Ollama(model="llama3.2:1b")
 
-# HELPER FUNCTIONS
-def truncate_context(context, question="", max_length=1024):
-    """Troncature du contexte pour respecter la limite de tokens."""
-    context_tokens = context.split()
-    question_tokens = question.split()
-    max_context_length = max_length - len(question_tokens) - 50
-    if len(context_tokens) > max_context_length:
-        return " ".join(context_tokens[:max_context_length])
-    return context
-
-# PROMPT TEMPLATES
-question_answering_prompt = PromptTemplate(
+# -----------------------------
+# Prompt Templates
+# -----------------------------
+qa_template = PromptTemplate(
     input_variables=["context", "question"],
-    template="""Utilisez le contexte suivant pour répondre de manière précise et concise à la question posée.
-    Si le contexte ne contient pas d'information pertinente, indiquez "Information non disponible dans le contexte".
-    Contexte : {context}
-    Question : {question}
-    Réponse (soyez clair et direct) : """
-)
+    template="""
+You are a helpful assistant. Given the following context from a PDF, please answer the question accurately. If the answer is not in the context, say you don't know.
 
-question_generation_prompt = PromptTemplate(
-    input_variables=["context", "num_questions"],
-    template="""En fonction du contexte ci-dessous, générez {num_questions} questions claires et pertinentes,
-    couvrant différents niveaux de réflexion (factuel, analytique, interprétatif).
-    Variez les formulations pour encourager une réflexion approfondie.
-    Contexte : {context}
-    Questions : """
-)
+Context:
+{context}
 
-training_plan_prompt = PromptTemplate(
-    input_variables=["user_answers"],
-    template="""Analysez l'historique des réponses de l'utilisateur pour identifier les domaines de compétence et les lacunes.
-    Proposez un plan de formation structuré sur plusieurs semaines, avec des objectifs hebdomadaires,
-    des activités spécifiques et des ressources suggérées.
-    Historique des réponses : {user_answers}
-    Plan de formation attendu :
-    - Objectif global : [Développer la compétence X]
-    - Semaine 1 : [Activités, Ressources, Objectifs spécifiques]
-    - Semaine 2 : [Activités, Ressources, Objectifs spécifiques]
-    ..."""
-)
-
-# CHAINS SETUP
-qa_chain = LLMChain(llm=llm, prompt=question_answering_prompt)
-qg_chain = LLMChain(llm=llm, prompt=question_generation_prompt)
-tp_chain = LLMChain(llm=llm, prompt=training_plan_prompt)
-
-# Custom Output Parser
-class JSONOutputParser(RouterOutputParser):
-    """Parses output from the LLMRouterChain into the required dictionary format."""
-    def parse(self, text: str) -> dict:
-        try:
-            # Attempt to parse as JSON
-            return json.loads(text.strip())
-        except json.JSONDecodeError as e:
-            raise ValueError(f"Invalid JSON output: {e}. Output was: {text}")
-
-# Router Prompt with an Attached Output Parser
-router_template = """
-Déterminez la tâche à effectuer en fonction de l'entrée de l'utilisateur.
-Entrée : {input}
-Les tâches possibles sont :
-1. Répondre à une question
-2. Générer des questions d'évaluation
-3. Plan de formation
-Retournez **uniquement** un objet JSON strictement valide avec les deux clés suivantes :
-- "destination" : Une chaîne correspondant à l'une des tâches possibles.
-- "next_inputs" : Un dictionnaire contenant les entrées nécessaires pour exécuter la tâche choisie.
-Votre réponse (uniquement l'objet JSON valide) :
+Question:
+{question}
 """
-
-router_prompt = PromptTemplate(
-    template=router_template,
-    input_variables=["input"],
-    output_parser=JSONOutputParser()  # Attach the output parser
 )
 
-# Router Chain
-router_chain = LLMRouterChain.from_llm(llm=llm, prompt=router_prompt)
+question_generation_template = PromptTemplate(
+    input_variables=["context"],
+    template="""
+You are an assistant tasked with generating relevant questions about the content below.
 
-# Chain Map for MultiPromptChain
-chain_map = {
-    "Répondre à une question": qa_chain,
-    "Générer des questions d'évaluation": qg_chain,
-    "Plan de formation": tp_chain
-}
+Content:
+{context}
 
-multi_prompt_chain = MultiPromptChain(
-    router_chain=router_chain,
-    destination_chains=chain_map,
-    default_chain=qa_chain
+Please produce a list of 5 insightful questions that one might ask after reading this content.
+"""
 )
 
-# STREAMLIT INTERFACE
-st.title("Système Intelligent")
-st.header("Consultation, Évaluation et Plan de Formation")
+slide_generation_template = PromptTemplate(
+    input_variables=["context"],
+    template="""
+You are an assistant that turns text into a concise slide deck summary. 
+Summarize the main points of the content below into a structured set of bullet points 
+as if creating slides for a presentation. Keep it concise and organized.
 
-task_type = st.radio(
-    "Choisissez une tâche :",
-    ["Répondre à une question", "Générer des questions d'évaluation", "Plan de formation"]
+Content:
+{context}
+"""
 )
 
-if task_type == "Répondre à une question":
-    question = st.text_input("Entrez votre question ici :")
-    if st.button("Soumettre"):
-        if question.strip():
-            context = "Contexte simulé ici pour la démonstration."
-            truncated_context = truncate_context(context, question)
-            response = qa_chain.run(context=truncated_context, question=question)
-            st.success("Réponse :")
-            st.write(response)
-        else:
-            st.warning("Veuillez poser une question avant de soumettre.")
+# -----------------------------
+# Main App
+# -----------------------------
+def main():
+    st.title("PDF Query, Q&A, and Slides Generator")
+    st.write("This application allows you to interact with PDFs using an Ollama-based LLM (llama3.2).")
 
-elif task_type == "Générer des questions d'évaluation":
-    num_questions = st.number_input("Nombre de questions à générer :", min_value=1, max_value=10, value=5)
-    if st.button("Générer des questions"):
-        context = "Contexte simulé ici pour la démonstration."
-        response = qg_chain.run(context=context, num_questions=num_questions)
-        st.success("Questions générées :")
-        st.write(response)
+    # --- PDF Selection ---
+    st.sidebar.header("PDF Selection")
+    pdf_files = get_available_pdfs()
+    selected_pdf = st.sidebar.selectbox("Select a PDF:", pdf_files)
+    
+    uploaded_file = st.sidebar.file_uploader("Upload a new PDF", type=["pdf"])
+    if uploaded_file is not None:
+        new_pdf_name = save_uploaded_file(uploaded_file)
+        st.sidebar.success(f"Uploaded {new_pdf_name}. Refresh the dropdown to see it.")
+        pdf_files = get_available_pdfs()
+        selected_pdf = new_pdf_name
 
-else:
-    user_answers = st.text_area("Historique des réponses utilisateur :", "")
-    if st.button("Générer un plan de formation"):
-        if user_answers.strip():
-            response = tp_chain.run(user_answers=user_answers)
-            st.success("Plan de formation proposé :")
-            st.write(response)
-        else:
-            st.warning("Veuillez fournir un historique des réponses utilisateur.")
+    if selected_pdf:
+        pdf_path = os.path.join("data", selected_pdf)
+        text = load_pdf_text(pdf_path)
 
-st.sidebar.info("Système intelligent pour la consultation, l'évaluation et la formation.")
+        # Split text into chunks if needed (optional)
+        text_splitter = CharacterTextSplitter(chunk_size=2000, chunk_overlap=200)
+        chunks = text_splitter.split_text(text)
+        context = "\n".join(chunks)
+
+        st.write(f"**Selected PDF:** {selected_pdf}")
+
+        # Feature 1: Q&A
+        st.header("Ask a Question About the PDF")
+        user_question = st.text_input("Enter your question:")
+        if user_question:
+            qa_chain = LLMChain(llm=llm, prompt=qa_template)
+            answer = qa_chain.run(context=context, question=user_question)
+            st.write("**Answer:**", answer.strip())
+
+        # Feature 2: Generate Questions
+        st.header("Generate Questions from the PDF")
+        if st.button("Generate Questions"):
+            qgen_chain = LLMChain(llm=llm, prompt=question_generation_template)
+            questions = qgen_chain.run(context=context)
+            st.write("**Generated Questions:**")
+            st.write(questions.strip())
+
+        # Feature 3: Generate Slides (Summaries)
+        st.header("Generate Slides from the PDF")
+        if st.button("Generate Slides"):
+            slide_chain = LLMChain(llm=llm, prompt=slide_generation_template)
+            slides = slide_chain.run(context=context)
+            st.write("**Slide Summary:**")
+            st.write(slides.strip())
+
+if __name__ == "__main__":
+    main()
