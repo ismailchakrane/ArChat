@@ -1,6 +1,5 @@
 import streamlit as st
 import os
-import speech_recognition as sr
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.document_loaders import PyPDFLoader
 from langchain.chains import LLMChain
@@ -9,7 +8,8 @@ from langchain.llms import Ollama
 from langchain.chains.router.llm_router import RouterOutputParser
 from langchain.chains.router import MultiPromptChain, LLMRouterChain
 
-from utils.prompts import question_answering_prompt, question_generation_prompt, training_plan_prompt, slide_generation_template
+import json
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, pipeline
 
 # -----------------------------
 # Utility Functions
@@ -43,29 +43,48 @@ def load_and_process_pdf(pdf_path):
     chunks = text_splitter.split_documents(documents)
     return "\n".join([chunk.page_content for chunk in chunks])
 
-# Fonction pour la reconnaissance vocale
-def recognize_audio():
-    recognizer = sr.Recognizer()
-    mic = sr.Microphone()
-
-    with mic as source:
-        st.info("Listening for your question...")
-        audio = recognizer.listen(source)
-    
-    try:
-        question = recognizer.recognize_google(audio)
-        st.success(f"Question recognized: {question}")
-        return question
-    except sr.UnknownValueError:
-        st.error("Sorry, I couldn't understand the audio. Please try again.")
-        return None
-    except sr.RequestError:
-        st.error("Could not request results from the speech recognition service.")
-        return None
-
 # -----------------------------
-# Initialize LLM
+# Prompt Templates
 # -----------------------------
+question_answering_prompt = PromptTemplate(
+    input_variables=["context", "question"],
+    template="""Use the following context to answer the question accurately and concisely.
+    If the context does not contain relevant information, indicate "Information not available in the context."
+    Context: {context}
+    Question: {question}
+    Answer (be clear and direct): """
+)
+
+question_generation_prompt = PromptTemplate(
+    input_variables=["context", "num_questions"],
+    template="""Generate exactly {num_questions} clear, concise, and relevant questions based solely on the provided context.
+    Do not generate introductions, explanations, or non-interrogative sentences.
+    Context: {context}
+    Questions:
+    """
+)
+
+training_plan_prompt = PromptTemplate(
+    input_variables=["answers"],
+    template="""Based on the following user responses, propose a structured training plan over several weeks.
+    User responses: {answers}
+    Training plan: """
+)
+
+slide_generation_template = PromptTemplate(
+    input_variables=["context"],
+    template="""
+You are an assistant that turns text into a concise slide deck summary. 
+Summarize the main points of the content below into a structured set of bullet points 
+as if creating slides for a presentation. Keep it concise and organized.
+
+Content:
+{context}
+"""
+)
+
+# STREAMLIT INTERFACE
+
 st.title("PDF Query, Q&A, Training, and Slides Generator")
 st.write("This application allows you to interact with PDFs using various LLM models.")
 
@@ -81,7 +100,6 @@ elif model_choice == "Google Gemma2 (2B)":
 elif model_choice == "Microsoft Phi 3 Mini (3.8B)":
     llm = Ollama(model="phi3")
 
-# CHAINS SETUP
 # CHAINS SETUP
 qa_chain = LLMChain(llm=llm, prompt=question_answering_prompt)
 qg_chain = LLMChain(llm=llm, prompt=question_generation_prompt)
@@ -110,25 +128,14 @@ task_type = st.radio(
 )
 
 if task_type == "Question answering":
-    input_method = st.radio("Choose input method", ["Text Q&A", "Audio Q&A"])
-
-    if input_method == "Text Q&A":
-        question = st.text_input("Enter your question here:")
-        if st.button("Submit"):
-            if question.strip():
-                response = qa_chain.run(context=context, question=question)
-                st.success("Answer:")
-                st.write(response.strip())
-            else:
-                st.warning("Please ask a question before submitting.")
-
-    elif input_method == "Audio Q&A":
-        if st.button("Ask by Audio"):
-            question = recognize_audio()  # Capture and recognize the audio question
-            if question:
-                response = qa_chain.run(context=context, question=question)
-                st.success("Answer:")
-                st.write(response.strip())
+    question = st.text_input("Enter your question here:")
+    if st.button("Submit"):
+        if question.strip():
+            response = qa_chain.run(context=context, question=question)
+            st.success("Answer:")
+            st.write(response.strip())
+        else:
+            st.warning("Please ask a question before submitting.")
 
 elif task_type == "Evaluation Questions Generating":
     num_questions = st.number_input("Number of questions:", min_value=1, max_value=10, value=5)
