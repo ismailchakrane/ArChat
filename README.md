@@ -1,12 +1,10 @@
 # ArChat
 
-This application allows you to interact with Articles (PDFs) using llama3.2.
+This application allows you to interact with Articles (PDFs).
 
 ## Setup
 
 ### Prerequisites
-
-Before you can run this project, ensure you have the `llama3.2:1b` model installed locally. To do this, follow these steps:
 
 #### Install Ollama  
 
@@ -14,7 +12,7 @@ Refer to the [official Ollama documentation](https://ollama.com/) for installati
 
 #### Download llama3.2:1b, gemma2:2b, Microsoft Phi 3 
 
-Once Ollama is installed, you can download the `llama3.2:1b` model by executing:
+Once Ollama is installed, you can download the models by executing:
 
 ```
 ollama pull llama3.2:3b
@@ -22,14 +20,21 @@ ollama pull gemma2:2b
 ollama pull phi3
 ```
 
-For more detailed information on the llama3.2:1b model, please consult the [official Ollama model library page](https://ollama.com/library/llama3.2:1b).
+### Create the environment
 
-### Create and activate a Conda environment
+#### Using conda
 
 ```
 conda env create -f env_llm.yml
 ```
 
+#### Using pip
+
+```
+conda create --name llm python=3.11.11
+conda activate llm
+pip install -r requirements
+```
 
 ## Run
 
