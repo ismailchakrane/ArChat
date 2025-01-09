@@ -123,3 +123,4 @@ youtube-transcript-api
 pyvis
 xhtml2pdf 
 markdown
+streamlit-tags

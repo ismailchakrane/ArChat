@@ -69,83 +69,105 @@ def save_uploaded_file(uploaded_file, directory="data"):
     return uploaded_file.name
 
 
-class Concept(BaseModel):
-    name: str
-    description: str
-    related_concepts: List[str]
+class Reference(BaseModel):
+    title: str
+    date: str
+    authors: List[str]
+    related_references: List[str] = []
 
-class ConceptGraph(BaseModel):
+class ReferenceGraph(BaseModel):
     article_title: str
-    concepts: List[Concept]
+    references: List[Reference]
 
 
-def extract_concepts_from_article(article_text: str) -> ConceptGraph:
+def extract_references_from_article(article_text: str) -> ReferenceGraph:
     prompt_content = f"""
-    You are an Expert AI that identifies all concepts from a scientific article.
-    Article text: ""{article_text}""
+    You are an Expert AI that identifies all references from a scientific article.
+
+    ARTICLE:
+    {article_text}
 
     Return JSON that follows this schema exactly:
-    {ConceptGraph.model_json_schema()}
+    {ReferenceGraph.model_json_schema()}
 
+    Explanation of the schema:
     - article_title: (string) The title or short name of this article
-    - concepts: (array) a list of:
-    - name: (string) concept name
-    - description: (string) short explanation
-    - related_concepts: (array of strings) all concept names related to this concept
+    - references: (array) a list of references. Each reference has:
+      - title: (string) The reference's own title
+      - date: (string) The publication date
+      - authors: (array of strings) The authors' names
+      - related_references: (array of strings) references that are related (by citation or mention)
     """
 
     response = chat(
-        messages=[
-            {
-                "role": "user",
-                "content": prompt_content,
-            }
-        ],
+        messages=[{"role": "user", "content": prompt_content}],
         model="llama3.2:3b",
-        format=ConceptGraph.model_json_schema(),
+        format=ReferenceGraph.model_json_schema(),
     )
-
     json_text = response.message.content
 
-    concept_graph = ConceptGraph.model_validate_json(json_text)
+    reference_graph = ReferenceGraph.model_validate_json(json_text)
+    return reference_graph
 
-    return concept_graph
 
-
-def show_concept_graph_in_notebook(concept_graph: ConceptGraph, out_html="concept_graph.html"):
+def reference_graph_to_html(
+    reference_graph: ReferenceGraph,
+    out_html="references_graph.html"
+):
     net = Network(height="600px", width="100%", notebook=False, directed=False)
 
+    # Center node for the article itself
     net.add_node(
-        concept_graph.article_title,
-        label=concept_graph.article_title,
-        shape='dot',
-        color='#FF6961',
-        title=f"Article: {concept_graph.article_title}",
+        reference_graph.article_title,
+        label=reference_graph.article_title,
+        shape="dot",
+        color="#FF6961",  # e.g., a red-ish color for the article center
+        title=f"Article: {reference_graph.article_title}"
     )
 
-    # Add each concept node + edges to the article
-    for c in concept_graph.concepts:
-        net.add_node(
-            c.name,
-            label=c.name,
-            shape='dot',
-            color='#77DD77',
-            title=c.description,
+    # A small color palette or random approach for references
+    # (Here we define a few colors and cycle through them)
+    color_palette = ["#77DD77", "#779ECB", "#F49AC2", "#CFCFC4", "#FFB347", "#AEC6CF"]
+
+    all_ref_names = set()
+    for idx, ref in enumerate(reference_graph.references):
+        # Each reference node
+        node_color = color_palette[idx % len(color_palette)]
+        # Show date & authors in the 'title' for hover
+        tooltip = (
+            f"Title: {ref.title}\n"
+            f"Date: {ref.date}\n"
+            f"Authors: {', '.join(ref.authors)}"
         )
-        net.add_edge(concept_graph.article_title, c.name)
+        net.add_node(
+            ref.title,
+            label=ref.title,  # node label = reference title
+            shape="dot",
+            color=node_color,
+            title=tooltip
+        )
+        # Edge from the article to this reference
+        net.add_edge(
+            reference_graph.article_title,
+            ref.title,
+            color="#555555"  # e.g. a dark gray for edges
+        )
+        all_ref_names.add(ref.title)
 
-    # Add edges for related concepts
-    all_concept_names = {cc.name for cc in concept_graph.concepts}
-    for c in concept_graph.concepts:
-        for related_name in c.related_concepts:
-            if related_name in all_concept_names and related_name != c.name:
-                net.add_edge(c.name, related_name)
+    # If references have 'related_references', connect them
+    for ref in reference_graph.references:
+        for rel_ref in ref.related_references:
+            if rel_ref in all_ref_names and rel_ref != ref.title:
+                net.add_edge(ref.title, rel_ref, color="#555555")
 
+    # Save to 'graphs/' subfolder
     out_dir = "graphs"
     os.makedirs(out_dir, exist_ok=True)
     out_path = os.path.join(out_dir, out_html)
     net.save_graph(out_path)
 
+    print(f"Graph HTML saved to: {out_path}")
+    return out_path
 
 def extract_pdf_title(file_path):
     try:

@@ -10,7 +10,7 @@ This application allows you to interact with Scientific Papers (PDFs).
 
 Refer to the [official Ollama documentation](https://ollama.com/) for installation instructions suitable for your operating system.
 
-#### Download llama3.2:1b, gemma2:2b, Microsoft Phi 3 
+#### Download llama3.2:3b, gemma2:2b, Microsoft Phi 3 
 
 Once Ollama is installed, you can download the models by executing:
 
@@ -33,7 +33,7 @@ conda env create -f env_llm.yml
 ```
 conda create --name ArChat python=3.11.11
 conda activate ArChat
-pip install -r requirements
+pip install -r requirements.txt
 ```
 
 ## Run

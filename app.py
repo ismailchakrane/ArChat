@@ -1,17 +1,19 @@
 import streamlit as st
+from streamlit_tags import st_tags
 import os
 from prompts import *
 from helpers import *
+import json
 
 def main():
     st.title("ArChat : Chat With Scientific Papers")
     st.write("This application allows you to interact with Scentific Papers using RAG-System.")
 
     st.sidebar.header("Model Selection")
-    model_choice = st.sidebar.selectbox("Select an LLM model:", ["Ollama (Llama3.2)", "Google Gemma2 (2B)", "Microsoft Phi 3 Mini (3.8B)"])
+    model_choice = st.sidebar.selectbox("Select an LLM model:", ["Llama3.2 (3B)", "Google Gemma2 (2B)", "Microsoft Phi 3 Mini (3.8B)"])
 
     # Initialize LLM based on the selected model
-    if model_choice == "Ollama (Llama3.2)":
+    if model_choice == "Llama3.2 (3B)":
         llm = OllamaLLM(model="llama3.2:3b")
     elif model_choice == "Google Gemma2 (2B)":
         llm = OllamaLLM(model="gemma2:2b")
@@ -22,23 +24,47 @@ def main():
 
     mapping = get_available_pdfs()
     titles = list(mapping.keys())
-    selected_title = st.sidebar.selectbox("Select an article:", titles)
-    selected_pdf = mapping[selected_title]
 
+    search_query = st_tags(
+        label="Search for an article:",
+        text="Type to search...",
+        suggestions=titles,
+        maxtags=1,  # Only one selection allowed
+        key="search_bar"
+    )
+
+    selected_pdf = None
+    if search_query:
+        search_query_text = search_query[0].strip()  # Remove leading/trailing spaces
+        # Check for case-insensitive matching
+        for title in mapping.keys():
+            if search_query_text.lower() == title.lower():
+                selected_pdf = mapping[title]
+                break
+
+        if selected_pdf:
+            st.sidebar.success(f"Selected article: {search_query_text}")
+        else:
+            st.sidebar.warning("The selected article is not available. Please ensure it matches exactly.")
+
+    # Handle file upload
     uploaded_file = st.sidebar.file_uploader("Upload a new PDF", type=["pdf"])
     if uploaded_file is not None:
         new_pdf_name = save_uploaded_file(uploaded_file)
-        st.sidebar.success(f"Uploaded {new_pdf_name}. Refresh the dropdown to see it.")
-        selected_pdf = new_pdf_name
+        st.sidebar.success(f"Uploaded {new_pdf_name}. Refresh the page to see it in the search.")
+        selected_pdf = os.path.join("data", new_pdf_name)
 
-    pdf_path = os.path.join("data", selected_pdf)
-
-    st.write(f"**Selected PDF:** {selected_pdf}")
-    vectorstore = load_pdf_to_vectorstore(pdf_path)
-
+    # Display the selected PDF
+    if selected_pdf:
+        pdf_path = os.path.join("data", selected_pdf) if selected_pdf not in mapping else selected_pdf
+        st.write(f"**Selected PDF:** {selected_pdf}")
+        vectorstore = load_pdf_to_vectorstore(pdf_path)
+    else:
+        st.warning("No PDF selected. Please search for an article or upload a PDF.")
+        
     task_type = st.radio(
         "Choose a task:",
-        ["Question answering", "Summary Generation", "Graph Generation"]
+        ["Question answering", "Summary Generation", "References Graph Generation"]
     )
 
     if task_type == "Question answering":
@@ -92,29 +118,38 @@ def main():
                 )
             st.success("Summary generated! You can now download and open it in your browser.")
 
-    elif task_type == "Graph Generation":
-        st.write("Generate a concept graph from your selected PDF.")
+    elif task_type == "References Graph Generation":
+        st.write("Generate a reference graph from your selected PDF.")
 
         if st.button("Generate Graph"):
             article_text = get_txt_content(pdf_path)
-            concept_graph = extract_concepts_from_article(article_text)
 
             filename_with_ext = os.path.basename(pdf_path)
             file_name_only = os.path.splitext(filename_with_ext)[0]
 
+            reference_graph = extract_references_from_article(article_text)
+
             output_html = file_name_only + "_graph.html"
-            show_concept_graph_in_notebook(concept_graph, out_html=output_html)
+            html_path = reference_graph_to_html(reference_graph, out_html=output_html)
 
-            full_html_path = os.path.join("graphs", output_html)
-
-            with open(full_html_path, "rb") as file:
-                btn = st.download_button(
+            with open(html_path, "rb") as file:
+                st.download_button(
                     label="Download Graph HTML",
                     data=file,
                     file_name=output_html,
                     mime="text/html"
                 )
-            st.success("Graph generated! You can now download and open it in your browser.")
+
+            references_dict = reference_graph.model_dump()
+            references_json = json.dumps(references_dict, indent=2, ensure_ascii=False)
+            st.download_button(
+                label="Download JSON of References",
+                data=references_json,
+                file_name=file_name_only + "_references.json",
+                mime="application/json"
+            )
+
+            st.success("Graph generated! You can now download and open it in your browser, and also download the references JSON.")
 
 if __name__ == "__main__":
     main()
