@@ -1,6 +1,6 @@
 # ArChat
 
-This application allows you to interact with Articles (PDFs).
+This application allows you to interact with Scientific Papers (PDFs).
 
 ## Setup
 
@@ -31,8 +31,8 @@ conda env create -f env_llm.yml
 #### Using pip
 
 ```
-conda create --name llm python=3.11.11
-conda activate llm
+conda create --name ArChat python=3.11.11
+conda activate ArChat
 pip install -r requirements
 ```
 

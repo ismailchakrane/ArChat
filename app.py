@@ -1,150 +1,120 @@
 import streamlit as st
 import os
-import speech_recognition as sr
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.document_loaders import PyPDFLoader
-from langchain.chains import LLMChain
-from langchain.prompts import PromptTemplate
-from langchain.llms import Ollama
-from langchain.chains.router.llm_router import RouterOutputParser
-from langchain.chains.router import MultiPromptChain, LLMRouterChain
+from prompts import *
+from helpers import *
 
-from utils.prompts import question_answering_prompt, question_generation_prompt, training_plan_prompt, slide_generation_template
+def main():
+    st.title("ArChat : Chat With Scientific Papers")
+    st.write("This application allows you to interact with Scentific Papers using RAG-System.")
 
-# -----------------------------
-# Utility Functions
-# -----------------------------
-def load_pdf_text(pdf_path):
-    loader = PyPDFLoader(pdf_path)
-    docs = loader.load()
-    text = "\n".join([doc.page_content for doc in docs])
-    return text
+    st.sidebar.header("Model Selection")
+    model_choice = st.sidebar.selectbox("Select an LLM model:", ["Ollama (Llama3.2)", "Google Gemma2 (2B)", "Microsoft Phi 3 Mini (3.8B)"])
 
-def get_available_pdfs(directory="data"):
-    files = [f for f in os.listdir(directory) if f.lower().endswith(".pdf")]
-    return files
+    # Initialize LLM based on the selected model
+    if model_choice == "Ollama (Llama3.2)":
+        llm = OllamaLLM(model="llama3.2:3b")
+    elif model_choice == "Google Gemma2 (2B)":
+        llm = OllamaLLM(model="gemma2:2b")
+    elif model_choice == "Microsoft Phi 3 Mini (3.8B)":
+        llm = OllamaLLM(model="phi3")
 
-def save_uploaded_file(uploaded_file, directory="data"):
-    with open(os.path.join(directory, uploaded_file.name), "wb") as f:
-        f.write(uploaded_file.getbuffer())
-    return uploaded_file.name
+    st.sidebar.header("PDF Selection")
 
-# Charger et traiter le contenu du PDF
-def load_and_process_pdf(pdf_path):
-    loader = PyPDFLoader(pdf_path)
-    documents = loader.load()
+    mapping = get_available_pdfs()
+    titles = list(mapping.keys())
+    selected_title = st.sidebar.selectbox("Select an article:", titles)
+    selected_pdf = mapping[selected_title]
 
-    # Suppression des doublons
-    unique_documents = {doc.page_content: doc for doc in documents}
-    documents = list(unique_documents.values())
+    uploaded_file = st.sidebar.file_uploader("Upload a new PDF", type=["pdf"])
+    if uploaded_file is not None:
+        new_pdf_name = save_uploaded_file(uploaded_file)
+        st.sidebar.success(f"Uploaded {new_pdf_name}. Refresh the dropdown to see it.")
+        selected_pdf = new_pdf_name
 
-    # Diviser en chunks
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=200)
-    chunks = text_splitter.split_documents(documents)
-    return "\n".join([chunk.page_content for chunk in chunks])
+    pdf_path = os.path.join("data", selected_pdf)
 
-# Fonction pour la reconnaissance vocale
-def recognize_audio():
-    recognizer = sr.Recognizer()
-    mic = sr.Microphone()
+    st.write(f"**Selected PDF:** {selected_pdf}")
+    vectorstore = load_pdf_to_vectorstore(pdf_path)
 
-    with mic as source:
-        st.info("Listening for your question...")
-        audio = recognizer.listen(source)
-    
-    try:
-        question = recognizer.recognize_google(audio)
-        st.success(f"Question recognized: {question}")
-        return question
-    except sr.UnknownValueError:
-        st.error("Sorry, I couldn't understand the audio. Please try again.")
-        return None
-    except sr.RequestError:
-        st.error("Could not request results from the speech recognition service.")
-        return None
+    task_type = st.radio(
+        "Choose a task:",
+        ["Question answering", "Summary Generation", "Graph Generation"]
+    )
 
-# -----------------------------
-# Initialize LLM
-# -----------------------------
-st.title("PDF Query, Q&A, Training, and Slides Generator")
-st.write("This application allows you to interact with PDFs using various LLM models.")
+    if task_type == "Question answering":
+        input_method = st.radio("Choose input method", ["Text Q&A", "Audio Q&A"])
 
-# --- Model Selection ---
-st.sidebar.header("Model Selection")
-model_choice = st.sidebar.selectbox("Select an LLM model:", ["Ollama (Llama3.2)", "Google Gemma2 (2B)", "Microsoft Phi 3 Mini (3.8B)"])
+        if input_method == "Text Q&A":
+            question = st.text_input("Enter your question here:")
+            if st.button("Submit"):
+                if question.strip():
+                    prompt = ChatPromptTemplate.from_template(question_answering_prompt)      
+                    relevent_docs = retrieve_from_vectorstore(vectorstore, query=question)
+                    prompt_with_context = prompt.format(context=relevent_docs, question=question)
+                    response = llm.invoke(prompt_with_context)
 
-# Initialize LLM based on the selected model
-if model_choice == "Ollama (Llama3.2)":
-    llm = Ollama(model="llama3.2:3b")
-elif model_choice == "Google Gemma2 (2B)":
-    llm = Ollama(model="gemma2:2b")
-elif model_choice == "Microsoft Phi 3 Mini (3.8B)":
-    llm = Ollama(model="phi3")
+                    st.success("Answer:")
+                    st.write(response.strip())
+                else:
+                    st.warning("Please ask a question before submitting.")
 
-# CHAINS SETUP
-# CHAINS SETUP
-qa_chain = LLMChain(llm=llm, prompt=question_answering_prompt)
-qg_chain = LLMChain(llm=llm, prompt=question_generation_prompt)
-tp_chain = LLMChain(llm=llm, prompt=training_plan_prompt)
+        elif input_method == "Audio Q&A":
+            pass
+            # if st.button("Ask by Audio"):
+            #     question = recognize_audio()  # Capture and recognize the audio question
+            #     if question:
+            #         response = qa_chain.run(context=context, question=question)
+            #         st.success("Answer:")
+            #         st.write(response.strip())
 
-# STREAMLIT INTERFACE CONTINUED
-st.sidebar.header("PDF Selection")
-pdf_files = get_available_pdfs()
-selected_pdf = st.sidebar.selectbox("Select a PDF:", pdf_files)
+    elif task_type == "Summary Generation":
+        if st.button("Generate Summary"):
+            prompt = ChatPromptTemplate.from_template(summary_generation_template)      
+            article_text = get_txt_content(pdf_path)
+            prompt_with_context = prompt.format(context=article_text)
 
-uploaded_file = st.sidebar.file_uploader("Upload a new PDF", type=["pdf"])
-if uploaded_file is not None:
-    new_pdf_name = save_uploaded_file(uploaded_file)
-    st.sidebar.success(f"Uploaded {new_pdf_name}. Refresh the dropdown to see it.")
-    pdf_files = get_available_pdfs()
-    selected_pdf = new_pdf_name
+            filename_with_ext = os.path.basename(pdf_path)
+            file_name_only = os.path.splitext(filename_with_ext)[0]
+            output_pdf = file_name_only + "_summary.pdf"
 
-PDF_FILE = os.path.join("data", selected_pdf)
+            response = llm.invoke(prompt_with_context)
 
-st.write(f"**Selected PDF:** {selected_pdf}")
-context = load_and_process_pdf(PDF_FILE)
+            markdown_to_pdf(response, output_file=output_pdf)
+        
+            full_pdf_path = os.path.join("summary", output_pdf)
 
-task_type = st.radio(
-    "Choose a task:",
-    ["Question answering", "Evaluation Questions Generating", "Training plan Propose", "Slides Generating"]
-)
+            with open(full_pdf_path, "rb") as file:
+                btn = st.download_button(
+                    label="Download Summary PDF",
+                    data=file,
+                    file_name=output_pdf,
+                    mime="text/pdf"
+                )
+            st.success("Summary generated! You can now download and open it in your browser.")
 
-if task_type == "Question answering":
-    input_method = st.radio("Choose input method", ["Text Q&A", "Audio Q&A"])
+    elif task_type == "Graph Generation":
+        st.write("Generate a concept graph from your selected PDF.")
 
-    if input_method == "Text Q&A":
-        question = st.text_input("Enter your question here:")
-        if st.button("Submit"):
-            if question.strip():
-                response = qa_chain.run(context=context, question=question)
-                st.success("Answer:")
-                st.write(response.strip())
-            else:
-                st.warning("Please ask a question before submitting.")
+        if st.button("Generate Graph"):
+            article_text = get_txt_content(pdf_path)
+            concept_graph = extract_concepts_from_article(article_text)
 
-    elif input_method == "Audio Q&A":
-        if st.button("Ask by Audio"):
-            question = recognize_audio()  # Capture and recognize the audio question
-            if question:
-                response = qa_chain.run(context=context, question=question)
-                st.success("Answer:")
-                st.write(response.strip())
+            filename_with_ext = os.path.basename(pdf_path)
+            file_name_only = os.path.splitext(filename_with_ext)[0]
 
-elif task_type == "Evaluation Questions Generating":
-    num_questions = st.number_input("Number of questions:", min_value=1, max_value=10, value=5)
-    if st.button("Generate questions"):
-        response = qg_chain.run(context=context, num_questions=num_questions)
-        st.success("Generated Questions:")
-        st.write(response.strip())
+            output_html = file_name_only + "_graph.html"
+            show_concept_graph_in_notebook(concept_graph, out_html=output_html)
 
-elif task_type == "Training plan Propose":
-    if st.button("Propose Training Plan"):
-        training_plan = tp_chain.run(answers=context)
-        st.success("Training Plan:")
-        st.write(training_plan.strip())
+            full_html_path = os.path.join("graphs", output_html)
 
-elif task_type == "Slides Generating":
-    slide_chain = LLMChain(llm=llm, prompt=slide_generation_template)
-    slides = slide_chain.run(context=context)
-    st.success("Slide Summary:")
-    st.write(slides.strip())
+            with open(full_html_path, "rb") as file:
+                btn = st.download_button(
+                    label="Download Graph HTML",
+                    data=file,
+                    file_name=output_html,
+                    mime="text/html"
+                )
+            st.success("Graph generated! You can now download and open it in your browser.")
+
+if __name__ == "__main__":
+    main()
