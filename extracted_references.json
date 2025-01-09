@@ -1,0 +1,42 @@
+[
+  {
+    "title": "Bert, Devlin, Jacob, Lee, Yinhan, Taylor, Stephen R.",
+    "authors": [
+      "Devlin, J.",
+      "Chen, Q.",
+      "Self, K.",
+      "Gupta, S."
+    ],
+    "date": "2019"
+  },
+  {
+    "title": "Holtzman, Sam, Duong, Thong, Jung, Tim D., Nygaard, Nina A.",
+    "authors": [
+      "Holtzman, S. D.",
+      "Duong, T.",
+      "Jung, T. D.",
+      "Nygaard, N. A."
+    ],
+    "date": "2019"
+  },
+  {
+    "title": "Dosovitskiy, Alexey, Kolesnikov, Alexander, Lavrinov, Dmitry, Siruk, Valeriy, Sitzmann, Vladimir.",
+    "authors": [
+      "Dosovitskiy, A.",
+      "Kolesnikov, A.",
+      "Lavrinov, D.",
+      "Siruk, V.",
+      "Sitzmann, V."
+    ],
+    "date": "2020"
+  },
+  {
+    "title": "He, Kaiming, Zhang, Xiang, Ren, Jian, Sun, Jian.",
+    "authors": [
+      "He, K.",
+      "Zhang, X.",
+      "Ren, J.",
+      "Sun, J."
+    ]
+  }
+]

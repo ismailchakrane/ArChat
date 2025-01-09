@@ -64,7 +64,7 @@ def main():
         
     task_type = st.radio(
         "Choose a task:",
-        ["Question answering", "Summary Generation", "References Graph Generation"]
+        ["Question answering", "Summary Generation", "References Graph Generation", "Reference Extraction"]
     )
 
     if task_type == "Question answering":
@@ -150,6 +150,36 @@ def main():
             )
 
             st.success("Graph generated! You can now download and open it in your browser, and also download the references JSON.")
+    elif task_type == "Reference Extraction":
+        
+        if st.button("Extract References"):
+            # Charger le texte du PDF
+            article_text = get_txt_content(pdf_path)
+
+            # Extraire les références avec la nouvelle fonction
+            references = extract_references_with_prompts(article_text)
+
+            if references:
+                st.success("References extracted successfully!")
+
+                # Affichage des références dans Streamlit
+                st.subheader("References Found:")
+                st.json(references)
+
+                # Sauvegarder les références au format JSON
+                output_file = save_references_to_json(references, output_file="extracted_references.json")
+
+                # Bouton pour télécharger le fichier JSON
+                with open(output_file, "rb") as f:
+                    st.download_button(
+                        label="Download References JSON",
+                        data=f,
+                        file_name="extracted_references.json",
+                        mime="application/json",
+                    )
+            else:
+                st.warning("No references could be extracted.")
+
 
 if __name__ == "__main__":
     main()

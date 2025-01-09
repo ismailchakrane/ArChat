@@ -221,3 +221,66 @@ def markdown_to_pdf(markdown_string, output_file="output.pdf"):
         print("Error: Unable to create PDF")
     else:
         print(f"PDF successfully created: {out_path}")
+
+import json
+from ollama import chat
+
+def extract_references_with_prompts(article_text):
+    """
+    Utilise un modèle de langage pour extraire les références d'un texte d'article scientifique.
+
+    Args:
+        article_text (str): Le texte complet de l'article.
+
+    Returns:
+        list: Une liste de dictionnaires représentant les références extraites.
+    """
+    # Préparer le prompt pour extraire les références
+    prompt = f"""
+    You are an expert in extracting references from scientific articles.
+
+    ARTICLE TEXT:
+    {article_text}
+
+    Please extract all references in the following JSON format:
+    [
+        {{
+            "title": "Title of the reference",
+            "authors": ["Author 1", "Author 2"],
+            "date": "Publication Date"
+        }},
+        ...
+    ]
+
+    Only include the references section from the article and follow the format exactly.
+    """
+
+    # Utilisation du modèle de langage pour répondre au prompt
+    response = chat(
+        messages=[{"role": "user", "content": prompt}],
+        model="llama3.2:3b"  # Remplacez par le modèle que vous utilisez
+    )
+    # Parser la réponse JSON
+    try:
+        references = json.loads(response.message.content)
+    except json.JSONDecodeError:
+        references = []  # Retourner une liste vide en cas d'erreur de parsing
+
+    return references
+def save_references_to_json(references, output_file="references.json"):
+    """
+    Sauvegarde les références extraites au format JSON.
+
+    Args:
+        references (list): Liste des références extraites.
+        output_file (str): Nom du fichier de sortie JSON.
+
+    Returns:
+        str: Le chemin du fichier JSON sauvegardé.
+    """
+    with open(output_file, "w", encoding="utf-8") as f:
+        json.dump(references, f, indent=2, ensure_ascii=False)
+    return output_file
+
+
+
