@@ -12,9 +12,6 @@ import sys
 
 
 def start_screenshot():
-    """
-    Capture l'écran et enregistre l'image.
-    """
     import pyautogui
     screenshot = pyautogui.screenshot()
     screenshot.save("screenshot.png")
@@ -24,9 +21,6 @@ def start_screenshot():
 from multiprocessing import Process
 
 def screenshot_notifier_process():
-    """
-    Processus de notification de capture d'écran avec PyQt5.
-    """
     app = QApplication(sys.argv)
     notifier = ScreenshotNotifier()
     notifier.show()
@@ -34,18 +28,11 @@ def screenshot_notifier_process():
     sys.exit(app.exec_())
 
 def show_screenshot_notifier():
-    """
-    Lance le processus de notification.
-    """
     process = Process(target=screenshot_notifier_process)
     process.start()
-    process.join()  # Attendre que le processus se termine
-
+    process.join()
 
 def extract_text_from_image(image_path):
-    """
-    Extrait le texte d'une image (capture d'écran).
-    """
     try:
         image = Image.open(image_path)
         text = pytesseract.image_to_string(image)
@@ -56,16 +43,17 @@ def extract_text_from_image(image_path):
 
 
 def main():
-    # Initialiser l'état de session
     if 'selected_text' not in st.session_state:
         st.session_state['selected_text'] = None
+    if 'last_task' not in st.session_state:
+        st.session_state['last_task'] = None  # Suivi de la dernière tâche effectuée
 
     st.title("ArChat : Chat With Scientific Papers or Screenshots")
     st.write("This application allows you to interact with scientific papers or screenshots using a RAG-System.")
 
-    # Modèle de langage
     st.sidebar.header("Model Selection")
     model_choice = st.sidebar.selectbox("Select an LLM model:", ["Llama3.2 (3B)", "Google Gemma2 (2B)", "Microsoft Phi 3 Mini (3.8B)"])
+    llm = None
     if model_choice == "Llama3.2 (3B)":
         llm = OllamaLLM(model="llama3.2:3b")
     elif model_choice == "Google Gemma2 (2B)":
@@ -73,37 +61,41 @@ def main():
     elif model_choice == "Microsoft Phi 3 Mini (3.8B)":
         llm = OllamaLLM(model="phi3")
 
-    # Sélection de la source
-    source_type = st.radio("Choisissez la source :", ["Téléverser un fichier PDF", "Prendre une capture d'écran"])
+    source_type = st.radio("Choisissez la source :", ["Select a PDF file", "Take screenshot"])
 
-    if source_type == "Téléverser un fichier PDF":
-        # Téléversement de fichier
-        uploaded_file = st.sidebar.file_uploader("Téléverser un fichier PDF", type=["pdf"])
+    if source_type == "Select a PDF file":
+        # Réinitialiser le chemin de la capture d'écran lorsque l'utilisateur choisit cette option
+        if 'screenshot_path' in st.session_state:
+            del st.session_state['screenshot_path']
+        
+        uploaded_file = st.sidebar.file_uploader("Select a PDF file", type=["pdf"])
         if uploaded_file is not None:
             new_pdf_name = save_uploaded_file(uploaded_file)
-            st.sidebar.success(f"Fichier téléversé : {new_pdf_name}.")
+            st.sidebar.success(f"File selected : {new_pdf_name}.")
             pdf_path = os.path.join("data", new_pdf_name)
-            st.write(f"**Fichier sélectionné :** {pdf_path}")
+            st.write(f"**File selected :** {pdf_path}")
             st.session_state['selected_text'] = get_txt_content(pdf_path)
 
-    elif source_type == "Prendre une capture d'écran":
-        # Capture d'écran
-        if st.button("Prendre une capture d'écran"):
+    elif source_type == "Take screenshot":
+        if st.button("Take screenshot"):
             show_screenshot_notifier()
             screenshot_path = "screenshot.png"
             if os.path.exists(screenshot_path):
+                st.session_state['screenshot_path'] = screenshot_path  # Stocker le chemin de l'image
                 st.success("Capture d'écran effectuée avec succès.")
                 extracted_text = extract_text_from_image(screenshot_path)
                 if extracted_text.strip():
-                    st.session_state['selected_text'] = extracted_text  # Stocker le texte dans session_state
-                    st.write("Texte extrait de la capture d'écran :")
-                    st.text(extracted_text)
+                    st.session_state['selected_text'] = extracted_text
                 else:
                     st.warning("Aucun texte détecté dans la capture d'écran.")
             else:
                 st.error("Erreur lors de la capture d'écran.")
 
-    # Récupération du texte sélectionné
+    # Affichage persistant de l'image
+    if st.session_state.get('screenshot_path'):
+        st.image(st.session_state['screenshot_path'], caption="Capture d'écran", use_column_width=True)
+
+
     selected_text = st.session_state.get('selected_text', None)
 
     if selected_text:
@@ -111,6 +103,11 @@ def main():
             "Choisissez une tâche :",
             ["Question answering", "Summary Generation", "References Graph Generation", "Reference Extraction"]
         )
+
+        # Réinitialiser l'état de la tâche si une nouvelle est sélectionnée
+        if st.session_state['last_task'] != task_type:
+            st.session_state['last_task'] = task_type
+            st.session_state['task_output'] = None
 
         if task_type == "Summary Generation":
             if st.button("Générer un résumé"):
@@ -129,10 +126,40 @@ def main():
                         mime="text/pdf",
                     )
                 st.success("Résumé généré avec succès !")
-        # Ajoutez d'autres fonctionnalités comme Reference Extraction ici...
+
+        elif task_type == "References Graph Generation":
+            if st.button("Générer le graphe des références"):
+                reference_graph = extract_references_from_article(selected_text)
+                graph_path = reference_graph_to_html(reference_graph)
+                st.success("Graphe des références généré avec succès !")
+                st.write(f"[Voir le graphe des références]({graph_path})")
+
+        elif task_type == "Reference Extraction":
+            if st.button("Extraire les références"):
+                references = extract_references_with_prompts(selected_text)
+                references_file = save_references_to_json(references)
+                with open(references_file, "rb") as file:
+                    st.download_button(
+                        label="Télécharger les références en JSON",
+                        data=file,
+                        file_name=references_file,
+                        mime="application/json",
+                    )
+                st.success("Références extraites avec succès !")
+
+        elif task_type == "Question answering":
+            question = st.text_input("Posez votre question :")
+            if st.button("Obtenir une réponse"):
+                if question.strip():
+                    prompt = ChatPromptTemplate.from_template(question_answering_prompt)
+                    prompt_with_context = prompt.format(context=selected_text, question=question)
+                    response = llm.invoke(prompt_with_context)
+                    st.write("Réponse :")
+                    st.write(response)
+                else:
+                    st.warning("Veuillez entrer une question.")
     else:
         st.warning("Aucune source sélectionnée ou texte disponible.")
-
 
 
 if __name__ == "__main__":
