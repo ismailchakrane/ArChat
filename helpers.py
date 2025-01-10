@@ -7,27 +7,18 @@ from langchain_core.prompts.chat import ChatPromptTemplate
 from langchain_core.documents import Document
 from markitdown import MarkItDown
 from typing import List
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError, validator
 from ollama import chat
 import os
 from pyvis.network import Network
 from pypdf import PdfReader
 from markdown import markdown
 from xhtml2pdf import pisa
-
-import warnings
-warnings.filterwarnings("ignore")
-
-def get_available_pdfs(directory="data"):
-    results = process_pdf_directory(directory)
-
-    title_to_file = {}
-    for item in results:
-        title = item["title"]
-        filename = item["filename"]
-        title_to_file[title] = filename
-
-    return title_to_file
+import json
+import re
+import time
+from typing import List, Optional
+import random
 
 
 def get_txt_content(pdf_path):
@@ -68,106 +59,6 @@ def save_uploaded_file(uploaded_file, directory="data"):
         f.write(uploaded_file.getbuffer())
     return uploaded_file.name
 
-
-class Reference(BaseModel):
-    title: str
-    date: str
-    authors: List[str]
-    related_references: List[str] = []
-
-class ReferenceGraph(BaseModel):
-    article_title: str
-    references: List[Reference]
-
-
-def extract_references_from_article(article_text: str) -> ReferenceGraph:
-    prompt_content = f"""
-    You are an Expert AI that identifies all references from a scientific article.
-
-    ARTICLE:
-    {article_text}
-
-    Return JSON that follows this schema exactly:
-    {ReferenceGraph.model_json_schema()}
-
-    Explanation of the schema:
-    - article_title: (string) The title or short name of this article
-    - references: (array) a list of references. Each reference has:
-      - title: (string) The reference's own title
-      - date: (string) The publication date
-      - authors: (array of strings) The authors' names
-      - related_references: (array of strings) references that are related (by citation or mention)
-    """
-
-    response = chat(
-        messages=[{"role": "user", "content": prompt_content}],
-        model="llama3.2:3b",
-        format=ReferenceGraph.model_json_schema(),
-    )
-    json_text = response.message.content
-
-    reference_graph = ReferenceGraph.model_validate_json(json_text)
-    return reference_graph
-
-
-def reference_graph_to_html(
-    reference_graph: ReferenceGraph,
-    out_html="references_graph.html"
-):
-    net = Network(height="600px", width="100%", notebook=False, directed=False)
-
-    # Center node for the article itself
-    net.add_node(
-        reference_graph.article_title,
-        label=reference_graph.article_title,
-        shape="dot",
-        color="#FF6961",  # e.g., a red-ish color for the article center
-        title=f"Article: {reference_graph.article_title}"
-    )
-
-    # A small color palette or random approach for references
-    # (Here we define a few colors and cycle through them)
-    color_palette = ["#77DD77", "#779ECB", "#F49AC2", "#CFCFC4", "#FFB347", "#AEC6CF"]
-
-    all_ref_names = set()
-    for idx, ref in enumerate(reference_graph.references):
-        # Each reference node
-        node_color = color_palette[idx % len(color_palette)]
-        # Show date & authors in the 'title' for hover
-        tooltip = (
-            f"Title: {ref.title}\n"
-            f"Date: {ref.date}\n"
-            f"Authors: {', '.join(ref.authors)}"
-        )
-        net.add_node(
-            ref.title,
-            label=ref.title,  # node label = reference title
-            shape="dot",
-            color=node_color,
-            title=tooltip
-        )
-        # Edge from the article to this reference
-        net.add_edge(
-            reference_graph.article_title,
-            ref.title,
-            color="#555555"  # e.g. a dark gray for edges
-        )
-        all_ref_names.add(ref.title)
-
-    # If references have 'related_references', connect them
-    for ref in reference_graph.references:
-        for rel_ref in ref.related_references:
-            if rel_ref in all_ref_names and rel_ref != ref.title:
-                net.add_edge(ref.title, rel_ref, color="#555555")
-
-    # Save to 'graphs/' subfolder
-    out_dir = "graphs"
-    os.makedirs(out_dir, exist_ok=True)
-    out_path = os.path.join(out_dir, out_html)
-    net.save_graph(out_path)
-
-    print(f"Graph HTML saved to: {out_path}")
-    return out_path
 
 def extract_pdf_title(file_path):
     try:
@@ -222,32 +113,45 @@ def markdown_to_pdf(markdown_string, output_file="output.pdf"):
     else:
         print(f"PDF successfully created: {out_path}")
 
-import json
-from ollama import chat
 
-def extract_references_with_prompts(article_text):
-    """
-    Utilise un modèle de langage pour extraire les références d'un texte d'article scientifique.
+def extract_references(text):
+    pattern = re.compile(r"References\s*(.*)", re.IGNORECASE | re.DOTALL)
+    match = pattern.search(text)
 
-    Args:
-        article_text (str): Le texte complet de l'article.
+    if match:
+        return match.group(1).strip()
+    else:
+        return ""
+    
 
-    Returns:
-        list: Une liste de dictionnaires représentant les références extraites.
-    """
-    # Préparer le prompt pour extraire les références
+class Reference(BaseModel):
+    title: str
+    authors: List[str]
+    date: str
+    journal: Optional[str] = None
+
+class ReferenceGraph(BaseModel):
+    references: List[Reference]
+
+
+def extract_references_with_prompts(article_text, llm_name):
+    references = extract_references(article_text)
+    print(references)
+    if not references:
+        return []
+
     prompt = f"""
     You are an expert in extracting references from scientific articles.
-
-    ARTICLE TEXT:
-    {article_text}
+    Here are the references found in the article:
+    {references}
 
     Please extract all references in the following JSON format:
     [
         {{
             "title": "Title of the reference",
             "authors": ["Author 1", "Author 2"],
-            "date": "Publication Date"
+            "date": "Publication Date",
+            "journal": "Journal name (if available)",
         }},
         ...
     ]
@@ -255,32 +159,80 @@ def extract_references_with_prompts(article_text):
     Only include the references section from the article and follow the format exactly.
     """
 
-    # Utilisation du modèle de langage pour répondre au prompt
     response = chat(
         messages=[{"role": "user", "content": prompt}],
-        model="llama3.2:3b"  # Remplacez par le modèle que vous utilisez
+        model=llm_name,
+        format=ReferenceGraph.model_json_schema()
     )
-    # Parser la réponse JSON
-    try:
-        references = json.loads(response.message.content)
-    except json.JSONDecodeError:
-        references = []  # Retourner une liste vide en cas d'erreur de parsing
 
-    return references
-def save_references_to_json(references, output_file="references.json"):
-    """
-    Sauvegarde les références extraites au format JSON.
+    print("\n model output", response.message.content)
 
-    Args:
-        references (list): Liste des références extraites.
-        output_file (str): Nom du fichier de sortie JSON.
-
-    Returns:
-        str: Le chemin du fichier JSON sauvegardé.
-    """
-    with open(output_file, "w", encoding="utf-8") as f:
-        json.dump(references, f, indent=2, ensure_ascii=False)
-    return output_file
+    return response.message.content
 
 
+def generate_random_color(excluded_colors=None):
+    """Generate a random hex color code, excluding specified colors."""
+    if excluded_colors is None:
+        excluded_colors = []
+    while True:
+        color = "#{:06x}".format(random.randint(0, 0xFFFFFF))
+        if color not in excluded_colors:
+            return color
 
+
+def save_references_graph(article_title, references, file_name_only: str):
+    if isinstance(references, str):
+        try:
+            references = json.loads(references).get("references", [])
+        except json.JSONDecodeError as e:
+            print(f"Error parsing references JSON: {e}")
+            return
+
+    net = Network(height="800px", width="100%", notebook=False, directed=False)
+
+    net.add_node(
+        article_title,
+        label=article_title,
+        shape="dot",
+        color="#779ECB",
+        title=f"Article: {article_title}"
+    )
+
+    all_ref_names = set()
+
+    for ref in references:
+        if not isinstance(ref, dict):
+            print(f"Invalid reference type: {type(ref)} - {ref}")
+            continue
+
+        # Safely extract details from the reference
+        title = ref.get("title", "Unknown Title")
+        date = ref.get("date", "Unknown Date")
+        authors = ref.get("authors", [])
+        journal = ref.get("journal", "Unknown Journal")
+
+        tooltip = (
+            f"Title: {title}\n"
+            f"Date: {date}\n"
+            f"Authors: {', '.join(authors) or 'Unknown Authors'}\n"
+            f"Journal: {journal}"
+        )
+
+        node_color = generate_random_color(["#779ECB"])
+        net.add_node(
+            title,
+            label=title,
+            shape="dot",
+            color=node_color,
+            title=tooltip
+        )
+        net.add_edge(article_title, title, color="#000")
+        all_ref_names.add(title)
+
+    out_dir = "graphs"
+    os.makedirs(out_dir, exist_ok=True)
+    out_path = os.path.join(out_dir, f"{file_name_only}_graph.html")
+    net.save_graph(out_path)
+
+    print(f"Graph saved to: {out_path}")
+    return out_path
