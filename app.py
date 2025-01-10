@@ -3,16 +3,69 @@ from streamlit_tags import st_tags
 import os
 from prompts import *
 from helpers import *
+from screenshott import *
 import json
+from PIL import Image
+import pytesseract
+from PyQt5.QtWidgets import QApplication
+import sys
+
+
+def start_screenshot():
+    """
+    Capture l'écran et enregistre l'image.
+    """
+    import pyautogui
+    screenshot = pyautogui.screenshot()
+    screenshot.save("screenshot.png")
+    print("Capture d'écran terminée et sauvegardée sous 'screenshot.png'.")
+
+
+from multiprocessing import Process
+
+def screenshot_notifier_process():
+    """
+    Processus de notification de capture d'écran avec PyQt5.
+    """
+    app = QApplication(sys.argv)
+    notifier = ScreenshotNotifier()
+    notifier.show()
+    notifier.start_countdown(on_complete=start_screenshot)
+    sys.exit(app.exec_())
+
+def show_screenshot_notifier():
+    """
+    Lance le processus de notification.
+    """
+    process = Process(target=screenshot_notifier_process)
+    process.start()
+    process.join()  # Attendre que le processus se termine
+
+
+def extract_text_from_image(image_path):
+    """
+    Extrait le texte d'une image (capture d'écran).
+    """
+    try:
+        image = Image.open(image_path)
+        text = pytesseract.image_to_string(image)
+        return text
+    except Exception as e:
+        print(f"Erreur lors de l'extraction de texte : {e}")
+        return ""
+
 
 def main():
-    st.title("ArChat : Chat With Scientific Papers")
-    st.write("This application allows you to interact with Scentific Papers using RAG-System.")
+    # Initialiser l'état de session
+    if 'selected_text' not in st.session_state:
+        st.session_state['selected_text'] = None
 
+    st.title("ArChat : Chat With Scientific Papers or Screenshots")
+    st.write("This application allows you to interact with scientific papers or screenshots using a RAG-System.")
+
+    # Modèle de langage
     st.sidebar.header("Model Selection")
     model_choice = st.sidebar.selectbox("Select an LLM model:", ["Llama3.2 (3B)", "Google Gemma2 (2B)", "Microsoft Phi 3 Mini (3.8B)"])
-
-    # Initialize LLM based on the selected model
     if model_choice == "Llama3.2 (3B)":
         llm = OllamaLLM(model="llama3.2:3b")
     elif model_choice == "Google Gemma2 (2B)":
@@ -20,165 +73,66 @@ def main():
     elif model_choice == "Microsoft Phi 3 Mini (3.8B)":
         llm = OllamaLLM(model="phi3")
 
-    st.sidebar.header("PDF Selection")
+    # Sélection de la source
+    source_type = st.radio("Choisissez la source :", ["Téléverser un fichier PDF", "Prendre une capture d'écran"])
 
-    mapping = get_available_pdfs()
-    titles = list(mapping.keys())
+    if source_type == "Téléverser un fichier PDF":
+        # Téléversement de fichier
+        uploaded_file = st.sidebar.file_uploader("Téléverser un fichier PDF", type=["pdf"])
+        if uploaded_file is not None:
+            new_pdf_name = save_uploaded_file(uploaded_file)
+            st.sidebar.success(f"Fichier téléversé : {new_pdf_name}.")
+            pdf_path = os.path.join("data", new_pdf_name)
+            st.write(f"**Fichier sélectionné :** {pdf_path}")
+            st.session_state['selected_text'] = get_txt_content(pdf_path)
 
-    search_query = st_tags(
-        label="Search for an article:",
-        text="Type to search...",
-        suggestions=titles,
-        maxtags=1,  # Only one selection allowed
-        key="search_bar"
-    )
-
-    selected_pdf = None
-    if search_query:
-        search_query_text = search_query[0].strip()  # Remove leading/trailing spaces
-        # Check for case-insensitive matching
-        for title in mapping.keys():
-            if search_query_text.lower() == title.lower():
-                selected_pdf = mapping[title]
-                break
-
-        if selected_pdf:
-            st.sidebar.success(f"Selected article: {search_query_text}")
-        else:
-            st.sidebar.warning("The selected article is not available. Please ensure it matches exactly.")
-
-    # Handle file upload
-    uploaded_file = st.sidebar.file_uploader("Upload a new PDF", type=["pdf"])
-    if uploaded_file is not None:
-        new_pdf_name = save_uploaded_file(uploaded_file)
-        st.sidebar.success(f"Uploaded {new_pdf_name}. Refresh the page to see it in the search.")
-        selected_pdf = os.path.join("data", new_pdf_name)
-
-    # Display the selected PDF
-    if selected_pdf:
-        pdf_path = os.path.join("data", selected_pdf) if selected_pdf not in mapping else selected_pdf
-        st.write(f"**Selected PDF:** {selected_pdf}")
-        vectorstore = load_pdf_to_vectorstore(pdf_path)
-    else:
-        st.warning("No PDF selected. Please search for an article or upload a PDF.")
-        
-    task_type = st.radio(
-        "Choose a task:",
-        ["Question answering", "Summary Generation", "References Graph Generation", "Reference Extraction"]
-    )
-
-    if task_type == "Question answering":
-        input_method = st.radio("Choose input method", ["Text Q&A", "Audio Q&A"])
-
-        if input_method == "Text Q&A":
-            question = st.text_input("Enter your question here:")
-            if st.button("Submit"):
-                if question.strip():
-                    prompt = ChatPromptTemplate.from_template(question_answering_prompt)      
-                    relevent_docs = retrieve_from_vectorstore(vectorstore, query=question)
-                    prompt_with_context = prompt.format(context=relevent_docs, question=question)
-                    response = llm.invoke(prompt_with_context)
-
-                    st.success("Answer:")
-                    st.write(response.strip())
+    elif source_type == "Prendre une capture d'écran":
+        # Capture d'écran
+        if st.button("Prendre une capture d'écran"):
+            show_screenshot_notifier()
+            screenshot_path = "screenshot.png"
+            if os.path.exists(screenshot_path):
+                st.success("Capture d'écran effectuée avec succès.")
+                extracted_text = extract_text_from_image(screenshot_path)
+                if extracted_text.strip():
+                    st.session_state['selected_text'] = extracted_text  # Stocker le texte dans session_state
+                    st.write("Texte extrait de la capture d'écran :")
+                    st.text(extracted_text)
                 else:
-                    st.warning("Please ask a question before submitting.")
-
-        elif input_method == "Audio Q&A":
-            pass
-            # if st.button("Ask by Audio"):
-            #     question = recognize_audio()  # Capture and recognize the audio question
-            #     if question:
-            #         response = qa_chain.run(context=context, question=question)
-            #         st.success("Answer:")
-            #         st.write(response.strip())
-
-    elif task_type == "Summary Generation":
-        if st.button("Generate Summary"):
-            prompt = ChatPromptTemplate.from_template(summary_generation_template)      
-            article_text = get_txt_content(pdf_path)
-            prompt_with_context = prompt.format(context=article_text)
-
-            filename_with_ext = os.path.basename(pdf_path)
-            file_name_only = os.path.splitext(filename_with_ext)[0]
-            output_pdf = file_name_only + "_summary.pdf"
-
-            response = llm.invoke(prompt_with_context)
-
-            markdown_to_pdf(response, output_file=output_pdf)
-        
-            full_pdf_path = os.path.join("summary", output_pdf)
-
-            with open(full_pdf_path, "rb") as file:
-                btn = st.download_button(
-                    label="Download Summary PDF",
-                    data=file,
-                    file_name=output_pdf,
-                    mime="text/pdf"
-                )
-            st.success("Summary generated! You can now download and open it in your browser.")
-
-    elif task_type == "References Graph Generation":
-        st.write("Generate a reference graph from your selected PDF.")
-
-        if st.button("Generate Graph"):
-            article_text = get_txt_content(pdf_path)
-
-            filename_with_ext = os.path.basename(pdf_path)
-            file_name_only = os.path.splitext(filename_with_ext)[0]
-
-            reference_graph = extract_references_from_article(article_text)
-
-            output_html = file_name_only + "_graph.html"
-            html_path = reference_graph_to_html(reference_graph, out_html=output_html)
-
-            with open(html_path, "rb") as file:
-                st.download_button(
-                    label="Download Graph HTML",
-                    data=file,
-                    file_name=output_html,
-                    mime="text/html"
-                )
-
-            references_dict = reference_graph.model_dump()
-            references_json = json.dumps(references_dict, indent=2, ensure_ascii=False)
-            st.download_button(
-                label="Download JSON of References",
-                data=references_json,
-                file_name=file_name_only + "_references.json",
-                mime="application/json"
-            )
-
-            st.success("Graph generated! You can now download and open it in your browser, and also download the references JSON.")
-    elif task_type == "Reference Extraction":
-        
-        if st.button("Extract References"):
-            # Charger le texte du PDF
-            article_text = get_txt_content(pdf_path)
-
-            # Extraire les références avec la nouvelle fonction
-            references = extract_references_with_prompts(article_text)
-
-            if references:
-                st.success("References extracted successfully!")
-
-                # Affichage des références dans Streamlit
-                st.subheader("References Found:")
-                st.json(references)
-
-                # Sauvegarder les références au format JSON
-                output_file = save_references_to_json(references, output_file="extracted_references.json")
-
-                # Bouton pour télécharger le fichier JSON
-                with open(output_file, "rb") as f:
-                    st.download_button(
-                        label="Download References JSON",
-                        data=f,
-                        file_name="extracted_references.json",
-                        mime="application/json",
-                    )
+                    st.warning("Aucun texte détecté dans la capture d'écran.")
             else:
-                st.warning("No references could be extracted.")
+                st.error("Erreur lors de la capture d'écran.")
+
+    # Récupération du texte sélectionné
+    selected_text = st.session_state.get('selected_text', None)
+
+    if selected_text:
+        task_type = st.radio(
+            "Choisissez une tâche :",
+            ["Question answering", "Summary Generation", "References Graph Generation", "Reference Extraction"]
+        )
+
+        if task_type == "Summary Generation":
+            if st.button("Générer un résumé"):
+                prompt = ChatPromptTemplate.from_template(summary_generation_template)
+                prompt_with_context = prompt.format(context=selected_text)
+
+                output_pdf = "summary_output.pdf"
+                response = llm.invoke(prompt_with_context)
+                markdown_to_pdf(response, output_file=output_pdf)
+
+                with open(os.path.join("summary", output_pdf), "rb") as file:
+                    st.download_button(
+                        label="Télécharger le résumé en PDF",
+                        data=file,
+                        file_name=output_pdf,
+                        mime="text/pdf",
+                    )
+                st.success("Résumé généré avec succès !")
+        # Ajoutez d'autres fonctionnalités comme Reference Extraction ici...
+    else:
+        st.warning("Aucune source sélectionnée ou texte disponible.")
+
 
 
 if __name__ == "__main__":

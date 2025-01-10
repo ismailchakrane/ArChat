@@ -260,6 +260,7 @@ def extract_references_with_prompts(article_text):
         messages=[{"role": "user", "content": prompt}],
         model="llama3.2:3b"  # Remplacez par le modèle que vous utilisez
     )
+
     # Parser la réponse JSON
     try:
         references = json.loads(response.message.content)
