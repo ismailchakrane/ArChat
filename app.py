@@ -4,7 +4,7 @@ from helpers import *
 from screenshott import *
 
 def main():
-    st.title("ArChat : Chat With Scientific Papers")
+    st.title("ArChat : Chat With Scientific Articles")
     st.write("This application allows you to interact with scientific papers using RAG.")
 
     st.sidebar.header("Model Selection")
@@ -45,7 +45,7 @@ def main():
             screenshot_path = "screenshot.png"
             if os.path.exists(screenshot_path):
                 st.session_state['screenshot_path'] = screenshot_path
-                st.success("Capture d'écran effectuée avec succès.")
+                st.success("Screenshot taken successfully")
                 extracted_text = extract_text_from_image(screenshot_path)
                 if extracted_text.strip():
                     temp_pdf_path = save_text_as_temp_pdf(extracted_text)

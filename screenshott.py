@@ -44,7 +44,7 @@ class ScreenshotNotifier(QWidget):
             self.update_label()
 
     def update_label(self):
-        self.label.setText(f"Capture d'écran commencera dans {self.remaining_time} secondes...")
+        self.label.setText(f"Screenshot will start in {self.remaining_time} seconds...")
 
 def save_text_as_temp_pdf(text):
     try:
