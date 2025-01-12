@@ -2,55 +2,6 @@ import streamlit as st
 from prompts import *
 from helpers import *
 from screenshott import *
-from PIL import Image
-import pytesseract
-from PyQt5.QtWidgets import QApplication
-import tempfile
-import os
-import sys
-from multiprocessing import Process
-import pyautogui
-from fpdf import FPDF
-
-def save_text_as_temp_pdf(text):
-    try:
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf", dir="data")
-        temp_path = temp_file.name
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Arial", size=12)
-        pdf.multi_cell(0, 10, text.encode('latin-1', 'replace').decode('latin-1'))
-        pdf.output(temp_path)
-        return temp_path
-    except Exception as e:
-        print(f"Error creating temporary PDF file: {e}")
-        return None
-
-def start_screenshot():
-    screenshot = pyautogui.screenshot()
-    screenshot.save("screenshot.png")
-    print("Capture d'écran terminée et sauvegardée sous 'screenshot.png'.")
-
-def screenshot_notifier_process():
-    app = QApplication(sys.argv)
-    notifier = ScreenshotNotifier()
-    notifier.show()
-    notifier.start_countdown(on_complete=start_screenshot)
-    sys.exit(app.exec_())
-
-def show_screenshot_notifier():
-    process = Process(target=screenshot_notifier_process)
-    process.start()
-    process.join()
-
-def extract_text_from_image(image_path):
-    try:
-        image = Image.open(image_path)
-        text = pytesseract.image_to_string(image)
-        return text
-    except Exception as e:
-        print(f"Erreur lors de l'extraction de texte : {e}")
-        return ""
 
 def main():
     st.title("ArChat : Chat With Scientific Papers")
@@ -101,13 +52,13 @@ def main():
                     if temp_pdf_path:
                         st.session_state.selected_pdf = temp_pdf_path
                         st.session_state.selected_text = extracted_text
-                        st.success("Texte extrait et converti en PDF temporaire avec succès.")
+                        st.success("Text extracted and converted to temporary PDF successfully")
                     else:
-                        st.error("Erreur lors de la création du fichier PDF temporaire.")
+                        st.error("Error creating temporary PDF file")
                 else:
-                    st.warning("Aucun texte détecté dans la capture d'écran.")
+                    st.warning("No text detected in the screenshot")
             else:
-                st.error("Erreur lors de la capture d'écran.")
+                st.error("Error while taking screenshot")
 
     if st.session_state.get('screenshot_path'):
         st.image(st.session_state['screenshot_path'], caption="Capture d'écran", use_container_width=True)

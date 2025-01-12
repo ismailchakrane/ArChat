@@ -1,6 +1,13 @@
 from PyQt5.QtWidgets import QApplication, QLabel, QVBoxLayout, QWidget
 from PyQt5.QtCore import QTimer
 import sys
+from PIL import Image
+import pytesseract
+from PyQt5.QtWidgets import QApplication
+import tempfile
+from multiprocessing import Process
+import pyautogui
+from fpdf import FPDF
 
 class ScreenshotNotifier(QWidget):
     def __init__(self):
@@ -19,11 +26,6 @@ class ScreenshotNotifier(QWidget):
         self.setLayout(layout)
 
     def start_countdown(self, duration=5, on_complete=None):
-        """
-        Démarre un compte à rebours et exécute une fonction une fois terminé.
-        :param duration: Durée en secondes.
-        :param on_complete: Fonction à exécuter après le compte à rebours.
-        """
         self.remaining_time = duration
         self.on_complete = on_complete
         self.update_label()
@@ -43,3 +45,46 @@ class ScreenshotNotifier(QWidget):
 
     def update_label(self):
         self.label.setText(f"Capture d'écran commencera dans {self.remaining_time} secondes...")
+
+def save_text_as_temp_pdf(text):
+    try:
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf", dir="data")
+        temp_path = temp_file.name
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", size=12)
+        pdf.multi_cell(0, 10, text.encode('latin-1', 'replace').decode('latin-1'))
+        pdf.output(temp_path)
+        return temp_path
+    except Exception as e:
+        print(f"Error creating temporary PDF file: {e}")
+        return None
+
+
+def start_screenshot():
+    screenshot = pyautogui.screenshot()
+    screenshot.save("screenshot.png")
+
+
+def screenshot_notifier_process():
+    app = QApplication(sys.argv)
+    notifier = ScreenshotNotifier()
+    notifier.show()
+    notifier.start_countdown(on_complete=start_screenshot)
+    sys.exit(app.exec_())
+
+
+def show_screenshot_notifier():
+    process = Process(target=screenshot_notifier_process)
+    process.start()
+    process.join()
+
+
+def extract_text_from_image(image_path):
+    try:
+        image = Image.open(image_path)
+        text = pytesseract.image_to_string(image)
+        return text
+    except Exception as e:
+        print(f"Erreur lors de l'extraction de texte : {e}")
+        return ""

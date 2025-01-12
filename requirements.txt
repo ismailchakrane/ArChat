@@ -124,3 +124,7 @@ pyvis
 xhtml2pdf 
 markdown
 streamlit-tags
+PyQt5
+pytesseract
+pyautogui
+fpdf
