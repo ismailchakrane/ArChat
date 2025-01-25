@@ -7,20 +7,23 @@ def main():
     st.title("ArChat : Chat With Scientific Articles")
     st.write("This application allows you to interact with scientific papers using RAG.")
 
-    st.sidebar.header("Model Selection")
-    model_choice = st.sidebar.selectbox("Select an LLM model:", ["Llama3.2 (3B)", "Google Gemma2 (2B)", "Microsoft Phi 3 Mini (3.8B)"])
+    # st.sidebar.header("Model Selection")
+    # model_choice = st.sidebar.selectbox("Select an LLM model:", ["Llama3.2 (3B)", "Google Gemma2 (2B)", "Microsoft Phi 3 Mini (3.8B)"])
 
-    model_name = None
-    if model_choice == "Llama3.2 (3B)":
-        llm = OllamaLLM(model="llama3.2:3b")
-        model_name = "llama3.2:3b"
-    elif model_choice == "Google Gemma2 (2B)":
-        llm = OllamaLLM(model="gemma2:2b")
-        model_name = "gemma2:2b"
-    elif model_choice == "Microsoft Phi 3 Mini (3.8B)":
-        llm = OllamaLLM(model="phi3")
-        model_name = "phi3"
+    # model_name = None
+    # if model_choice == "Llama3.2 (3B)":
+    #     llm = OllamaLLM(model="llama3.2:3b")
+    #     model_name = "llama3.2:3b"
+    # elif model_choice == "Google Gemma2 (2B)":
+    #     llm = OllamaLLM(model="gemma2:2b")
+    #     model_name = "gemma2:2b"
+    # elif model_choice == "Microsoft Phi 3 Mini (3.8B)":
+    #     llm = OllamaLLM(model="phi3")
+    #     model_name = "phi3"
 
+    llm = OllamaLLM(model="deepseek-r1:1.5b")
+    model_name="deepsek-r1"
+    
     source_type = st.radio("Choose your source:", ["Upload a PDF", "Take a Screenshot"])
 
     if 'selected_text' not in st.session_state:

@@ -48,7 +48,7 @@ def load_pdf_to_vectorstore(pdf_path):
 
     all_chunks_as_docs = [Document(page_content=txt) for txt in chunk_strings]
 
-    embeddings = HuggingFaceEmbeddings(model_name="NeuML/pubmedbert-base-embeddings")
+    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/paraphrase-multilingual-mpnet-base-v2")
     vectorstore = FAISS.from_documents(all_chunks_as_docs, embeddings)
 
     return vectorstore

@@ -1,0 +1,30 @@
+data/1409.3215v3.pdf;What is the main contribution of the paper?
+data/1409.3215v3.pdf;Why does reversing the input sequence improve the LSTM's performance?
+data/1409.3215v3.pdf;What methods were used to evaluate the performance of the LSTM model?
+data/1803.02155.pdf;What is the main contribution of the paper?
+data/1803.02155.pdf;How does the proposed relative position representation work in the Transformer?
+data/1803.02155.pdf;What were the experimental findings regarding the impact of relative position representations on BLEU scores?
+data/1910.01108.pdf;What is the main contribution of the DistilBERT paper?
+data/1910.01108.pdf;What is the triple loss used in training DistilBERT, and why is it important?
+data/1910.01108.pdf;How does DistilBERT perform compared to BERT and other models on benchmark tasks?
+data/2002.05202.pdf;What is the primary goal of the paper, and how is it achieved?
+data/2002.05202.pdf;Which GLU variants were tested, and which performed best?
+data/2002.05202.pdf;What modifications were made to the feed-forward layers in the Transformer for these experiments?;
+data/2004.14566.pdf;What is the main contribution of the paper?
+data/2004.14566.pdf;How does TRP improve upon traditional low-rank decomposition methods?
+data/2004.14566.pdf;What are the experimental results of TRP on CIFAR-10 and ImageNet?
+data/2020.aacl-main.88.pdf;What is the primary contribution of the paper?
+data/2020.aacl-main.88.pdf;How does the proposed compression method work?
+data/2020.aacl-main.88.pdf;What are the experimental findings of the method on the GLUE benchmark?
+data/2311.00502v1.pdf;What is the primary contribution of the paper?
+data/2311.00502v1.pdf;How does the INT4 quantization flow improve inference efficiency?
+data/2311.00502v1.pdf;What are the performance outcomes of the proposed method on CPU-based inference?
+data/ICML03-094.pdf;What problem does the paper address, and what is the proposed solution?
+data/ICML03-094.pdf;How does the weighted low-rank approximation differ from the unweighted case?
+data/ICML03-094.pdf;What experimental results demonstrate the utility of the proposed method?
+data/NIPS-1989-optimal-brain-damage-Paper.pdf;What is the main contribution of the Optimal Brain Damage (OBD) paper?
+data/NIPS-1989-optimal-brain-damage-Paper.pdf;How does the OBD method determine which weights to delete?
+data/NIPS-1989-optimal-brain-damage-Paper.pdf;What were the experimental findings when OBD was applied to a neural network?
+data/NIPS-1992-second-order-derivatives-for-network-pruning-optimal-brain-surgeon-Paper.pdf;What is the main contribution of the Optimal Brain Surgeon (OBS) method compared to previous pruning techniques like Optimal Brain Damage (OBD)?
+data/NIPS-1992-second-order-derivatives-for-network-pruning-optimal-brain-surgeon-Paper.pdf;How does OBS calculate the saliency of a weight for pruning?
+data/NIPS-1992-second-order-derivatives-for-network-pruning-optimal-brain-surgeon-Paper.pdf;What experimental results demonstrate the effectiveness of OBS?
