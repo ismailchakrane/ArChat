@@ -12,12 +12,10 @@ Refer to the [official Ollama documentation](https://ollama.com/) for installati
 
 #### Download llama3.2:3b, gemma2:2b, Microsoft Phi 3 
 
-Once Ollama is installed, you can download the models by executing:
+Once Ollama is installed, you can download the deepseek-r1 model by executing:
 
 ```
-ollama pull llama3.2:3b
-ollama pull gemma2:2b
-ollama pull phi3
+ollama pull deepseek-r1:1.5b
 ```
 
 ### Create the environment
