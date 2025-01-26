@@ -1,5 +1,7 @@
 # ArChat
 
+**_ArChat: Leveraging RAG-Based Approaches for Scientific Article Querying_**
+
 This application allows you to interact with Scientific Papers (PDFs).
 
 ## Setup
@@ -10,12 +12,15 @@ This application allows you to interact with Scientific Papers (PDFs).
 
 Refer to the [official Ollama documentation](https://ollama.com/) for installation instructions suitable for your operating system.
 
-#### Download llama3.2:3b, gemma2:2b, Microsoft Phi 3 
+#### Download models
 
-Once Ollama is installed, you can download the deepseek-r1 model by executing:
+Once Ollama is installed, you can download the necessary models by executing:
 
 ```
 ollama pull deepseek-r1:1.5b
+ollama pull llama3.2:3b
+ollama pull gemma2:2b
+ollama pull phi3
 ```
 
 ### Create the environment
@@ -38,8 +43,15 @@ pip install -r requirements.txt
 
 ```
 streamlit run app.py
+
 ```
 
-### Demo
+## Evaluation
+
+- **QA_evaluation.ipynb**: Evaluation of the question-answering text generation.  
+- **RE_evaluation.ipynb**: Evaluation of the reference extraction.
+
+
+## Demo
 
 [Video Demonstration](https://www.youtube.com/watch?v=QOy3HRuMnvY)
