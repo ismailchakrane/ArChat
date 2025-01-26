@@ -28,7 +28,8 @@ ollama pull phi3
 #### Using conda
 
 ```
-conda env create -f env_llm.yml
+conda env create -f env.yml
+conda activate llm
 ```
 
 #### Using pip
@@ -43,7 +44,6 @@ pip install -r requirements.txt
 
 ```
 streamlit run app.py
-
 ```
 
 ## Evaluation
